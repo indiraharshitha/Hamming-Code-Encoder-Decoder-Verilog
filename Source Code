@@ -1,0 +1,213 @@
+# encoder.v 
+module encoder(
+    input  [3:0] data,
+    output [6:0] code
+);
+
+wire p1,p2,p4;
+
+// Hamming (7,4)
+// Position:
+// 1=P1 2=P2 3=D3 4=P4 5=D2 6=D1 7=D0
+
+assign p1 = data[3] ^ data[2] ^ data[0];
+assign p2 = data[3] ^ data[1] ^ data[0];
+assign p4 = data[2] ^ data[1] ^ data[0];
+
+assign code = {p1,p2,data[3],p4,data[2],data[1],data[0]};
+
+endmodule
+
+#decoder.v
+
+module decoder(
+
+input [6:0] code_in,
+
+output [3:0] data_out,
+
+output reg error
+
+);
+
+reg [6:0] temp;
+
+reg s1,s2,s4;
+
+reg [2:0] syndrome;
+
+always @(*) begin
+
+temp = code_in;
+
+// Syndrome calculation
+
+s1 = temp[6]^temp[4]^temp[2]^temp[0];
+
+s2 = temp[5]^temp[4]^temp[1]^temp[0];
+
+s4 = temp[3]^temp[2]^temp[1]^temp[0];
+
+syndrome = {s4,s2,s1};
+
+error = 0;
+
+case(syndrome)
+
+3'b001: begin temp[6]=~temp[6]; error=1; end
+3'b010: begin temp[5]=~temp[5]; error=1; end
+3'b011: begin temp[4]=~temp[4]; error=1; end
+3'b100: begin temp[3]=~temp[3]; error=1; end
+3'b101: begin temp[2]=~temp[2]; error=1; end
+3'b110: begin temp[1]=~temp[1]; error=1; end
+3'b111: begin temp[0]=~temp[0]; error=1; end
+
+default:
+error=0;
+
+endcase
+
+end
+
+assign data_out = {temp[4],temp[2],temp[1],temp[0]};
+
+endmodule
+
+#top_module.v
+
+module top_module(
+
+input [3:0] data,
+
+input [6:0] error_mask,
+
+output [6:0] encoded,
+
+output [6:0] received,
+
+output [3:0] decoded,
+
+output error
+
+);
+
+wire [6:0] encoded_data;
+
+encoder ENC(
+
+.data(data),
+
+.code(encoded_data)
+
+);
+
+assign encoded = encoded_data;
+
+assign received = encoded_data ^ error_mask;
+
+decoder DEC(
+
+.code_in(received),
+
+.data_out(decoded),
+
+.error(error)
+
+);
+
+endmodule
+
+#tb_top
+
+`timescale 1ns/1ps
+
+module tb_top;
+
+reg [3:0] data;
+
+reg [6:0] error_mask;
+
+wire [6:0] encoded;
+
+wire [6:0] received;
+
+wire [3:0] decoded;
+
+wire error;
+
+top_module DUT(
+
+.data(data),
+
+.error_mask(error_mask),
+
+.encoded(encoded),
+
+.received(received),
+
+.decoded(decoded),
+
+.error(error)
+
+);
+
+initial begin
+
+$monitor("Time=%0t Data=%b Encoded=%b Received=%b Decoded=%b Error=%b",
+$time,data,encoded,received,decoded,error);
+
+// No error
+
+data=4'b1011;
+error_mask=7'b0000000;
+#20;
+
+// Error bit 1
+
+error_mask=7'b0000001;
+#20;
+
+// Error bit 2
+
+error_mask=7'b0000010;
+#20;
+
+// Error bit 3
+
+error_mask=7'b0000100;
+#20;
+
+// Error bit 4
+
+error_mask=7'b0001000;
+#20;
+
+// Error bit 5
+
+error_mask=7'b0010000;
+#20;
+
+// Error bit 6
+
+error_mask=7'b0100000;
+#20;
+
+// Error bit 7
+
+error_mask=7'b1000000;
+#20;
+
+// New data
+
+data=4'b0101;
+error_mask=7'b0000000;
+#20;
+
+error_mask=7'b0001000;
+#20;
+
+$finish;
+
+end
+
+endmodule
